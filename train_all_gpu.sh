@@ -43,7 +43,7 @@ epoch=600
   --train_component ${module} \
   --epoch        ${epoch} \
   > "${log_dir}/train${d_type}${DATE}.txt" \
-  2>&1 &
+  &
 
 export CUDA_VISIBLE_DEVICES=3
 epoch=300
@@ -57,5 +57,5 @@ do
     --train_component ${module} \
     --epoch        ${epoch} \
     > "${log_dir}/train${d_type}${DATE}.txt" \
-    2>&1 &
+    &
 done
