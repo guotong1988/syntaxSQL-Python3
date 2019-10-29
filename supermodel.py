@@ -171,7 +171,7 @@ class SuperModel(nn.Module):
             # if time.time() > timeout: failed=True; break
             vet = stack.pop()
             # print(vet)
-            hs_emb_var, hs_len = self.embed_layer.gen_x_history_batch(history)
+            history_emb_var, history_len = self.embed_layer.gen_x_history_batch(history)
             if len(idx_stack) > 0 and stack.size() < idx_stack[-1]:
                 # print("pop!!!!!!!!!!!!!!!!!!!!!!")
                 idx_stack.pop()
@@ -183,7 +183,7 @@ class SuperModel(nn.Module):
             if isinstance(vet,tuple) and vet[0] == "root":
                 if history[0][-1] != "root":
                     history[0].append("root")
-                    hs_emb_var, hs_len = self.embed_layer.gen_x_history_batch(history)
+                    history_emb_var, history_len = self.embed_layer.gen_x_history_batch(history)
                 if vet[1] != "original":
                     idx_stack.append(stack.size())
                     sql_stack.append(current_sql)
@@ -207,7 +207,7 @@ class SuperModel(nn.Module):
                     stack.push("none")
                     history[0].append("none")
                 else:
-                    score = self.multi_sql.forward(q_emb_var,q_len,hs_emb_var,hs_len,mkw_emb_var,mkw_len)
+                    score = self.multi_sql.forward(q_emb_var,q_len,history_emb_var,history_len,mkw_emb_var,mkw_len)
                     label = np.argmax(score[0].data.cpu().numpy())
                     label = SQL_OPS[label]
                     history[0].append(label)
@@ -220,7 +220,7 @@ class SuperModel(nn.Module):
                 stack.push(("root","original"))
                 # history[0].append("root")
             elif vet == "none":
-                score = self.key_word.forward(q_emb_var,q_len,hs_emb_var,hs_len,kw_emb_var,kw_len)
+                score = self.key_word.forward(q_emb_var,q_len,history_emb_var,history_len,kw_emb_var,kw_len)
                 kw_num_score, kw_score = [x.data.cpu().numpy() for x in score]
                 # print("kw_num_score:{}".format(kw_num_score))
                 # print("kw_score:{}".format(kw_score))
@@ -244,7 +244,7 @@ class SuperModel(nn.Module):
             #     score = self.having.forward(q_emb_var,q_len,hs_emb_var,hs_len,col_emb_var,col_len,)
             elif isinstance(vet,tuple) and vet[0] == "col":
                 # print("q_emb_var:{} hs_emb_var:{} col_emb_var:{}".format(q_emb_var.size(), hs_emb_var.size(),col_emb_var.size()))
-                score = self.col.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len)
+                score = self.col.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len)
                 col_num_score, col_score = [x.data.cpu().numpy() for x in score]
                 col_num = np.argmax(col_num_score[0]) + 1  # double check
                 cols = np.argsort(-col_score[0])[:col_num]
@@ -261,12 +261,12 @@ class SuperModel(nn.Module):
                         current_sql[kw].append(index_to_column_name(col, tables))
                 #predict and or or when there is multi col in where condition
                 if col_num > 1 and vet[1] == "where":
-                    score = self.andor.forward(q_emb_var,q_len,hs_emb_var,hs_len)
+                    score = self.andor.forward(q_emb_var,q_len,history_emb_var,history_len)
                     label = np.argmax(score[0].data.cpu().numpy())
                     andor_cond = COND_OPS[label]
                     current_sql[kw].append(andor_cond)
                 if vet[1] == "groupBy" and col_num > 0:
-                    score = self.having.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len, np.full(B, cols[0],dtype=np.int64))
+                    score = self.having.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len, np.full(B, cols[0],dtype=np.int64))
                     label = np.argmax(score[0].data.cpu().numpy())
                     if label == 1:
                         has_having = (label == 1)
@@ -285,9 +285,9 @@ class SuperModel(nn.Module):
                         print("idx_stack:{}".format(idx_stack))
                         print("sql_stack:{}".format(sql_stack))
                         exit(1)
-                hs_emb_var, hs_len = self.embed_layer.gen_x_history_batch(history)
+                history_emb_var, history_len = self.embed_layer.gen_x_history_batch(history)
 
-                score = self.agg.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len, np.full(B, vet[2],dtype=np.int64))
+                score = self.agg.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len, np.full(B, vet[2],dtype=np.int64))
                 agg_num_score, agg_score = [x.data.cpu().numpy() for x in score]
                 agg_num = np.argmax(agg_num_score[0])  # double check
                 agg_idxs = np.argsort(-agg_score[0])[:agg_num]
@@ -328,9 +328,9 @@ class SuperModel(nn.Module):
                 if vet[1] == "where":
                     # current_sql[kw].append(index_to_column_name(vet[2], tables))
                     history[0].append(index_to_column_name(vet[2], tables))
-                    hs_emb_var, hs_len = self.embed_layer.gen_x_history_batch(history)
+                    history_emb_var, history_len = self.embed_layer.gen_x_history_batch(history)
 
-                score = self.op.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len, np.full(B, vet[2],dtype=np.int64))
+                score = self.op.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len, np.full(B, vet[2],dtype=np.int64))
 
                 op_num_score, op_score = [x.data.cpu().numpy() for x in score]
                 op_num = np.argmax(op_num_score[0]) + 1  # num_score 0 maps to 1 in truth, must have at least one op
@@ -357,7 +357,7 @@ class SuperModel(nn.Module):
                         stack.push(("root_teminal", vet[2],op))
                 # stack.push(("root_teminal",vet[2]))
             elif isinstance(vet,tuple) and vet[0] == "root_teminal":
-                score = self.root_teminal.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len, np.full(B, vet[1],dtype=np.int64))
+                score = self.root_teminal.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len, np.full(B, vet[1],dtype=np.int64))
 
                 label = np.argmax(score[0].data.cpu().numpy())
                 label = ROOT_TERM_OPS[label]
@@ -387,7 +387,7 @@ class SuperModel(nn.Module):
             elif isinstance(vet,tuple) and vet[0] == "des_asc":
                 current_sql[kw].append(index_to_column_name(vet[1], tables))
                 current_sql[kw].append(vet[2])
-                score = self.des_asc.forward(q_emb_var, q_len, hs_emb_var, hs_len, col_emb_var, col_len, col_name_len, np.full(B, vet[1],dtype=np.int64))
+                score = self.des_asc.forward(q_emb_var, q_len, history_emb_var, history_len, col_emb_var, col_len, col_name_len, np.full(B, vet[1],dtype=np.int64))
                 label = np.argmax(score[0].data.cpu().numpy())
                 dec_asc,has_limit = DEC_ASC_OPS[label]
                 history[0].append(dec_asc)
